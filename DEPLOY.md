@@ -8,21 +8,33 @@ Cách deploy này đảm bảo **prod = local 100%**: cùng image = cùng code +
 
 ## Lần đầu setup
 
+### Bước 0 — Clone 2 repo thành thư mục NGANG CẤP
+
+`docker-compose.yml` nằm trong `be-phanmemzalo/` và build FE từ `../fe-phanmemzalo`,
+nên 2 repo PHẢI ở cùng 1 thư mục cha:
+
+```bash
+mkdir -p /srv/phanmemzalo && cd /srv/phanmemzalo
+git clone https://github.com/phamtuanyb/be-phanmemzalo.git
+git clone https://github.com/phamtuanyb/fe-phanmemzalo.git
+cd be-phanmemzalo          # mọi lệnh docker compose chạy từ đây
+```
+
 ### Bước 1 — Tạo file `.env`
 
 ```bash
-cp .env.example .env
+cp .env.production.example .env   # đã điền sẵn domain phanmemzalo.com
 ```
 
 Mở `.env` chỉnh các biến quan trọng:
 
-**Trên prod:**
+**Trên prod** (hoặc dùng sẵn `cp .env.production.example .env` — đã điền sẵn domain):
 - `JWT_SECRET` và `JWT_REFRESH_SECRET` → đổi sang chuỗi ngẫu nhiên (vd `openssl rand -hex 32`)
 - `DB_PASSWORD` → đổi password mạnh
-- `PUBLIC_URL` → `https://api.vsoftware.vn`
-- `CORS_ORIGINS` → `https://vsoftware.vn`
-- `NEXT_PUBLIC_API_URL` → `https://api.vsoftware.vn`
-- `NEXT_PUBLIC_SITE_URL` → `https://vsoftware.vn`
+- `PUBLIC_URL` → `https://api.phanmemzalo.com`
+- `CORS_ORIGINS` → `https://phanmemzalo.com,https://www.phanmemzalo.com`
+- `NEXT_PUBLIC_API_URL` → `https://api.phanmemzalo.com`
+- `NEXT_PUBLIC_SITE_URL` → `https://phanmemzalo.com`
 - SMTP_* nếu muốn nhận form qua email
 
 ### Bước 2 — Build và start
@@ -46,10 +58,33 @@ docker compose logs -f backend     # xem log BE
 curl http://localhost:3001/api/health  # nếu có health endpoint
 ```
 
-Truy cập:
+Truy cập (nội bộ server):
 - FE: http://localhost:3000
 - BE: http://localhost:3001/docs
 - Admin: http://localhost:3000/admin
+
+### Bước 4 — Nginx reverse proxy + SSL (để chạy qua domain HTTPS)
+
+Container chỉ chạy ở `localhost:3000/3001`. Để phục vụ `phanmemzalo.com` qua HTTPS,
+dùng file [`nginx/phanmemzalo.conf`](nginx/phanmemzalo.conf):
+
+```bash
+# DNS: trỏ phanmemzalo.com, www.phanmemzalo.com, api.phanmemzalo.com → IP server
+sudo apt install -y nginx certbot python3-certbot-nginx
+sudo cp nginx/phanmemzalo.conf /etc/nginx/sites-available/phanmemzalo.conf
+sudo ln -s /etc/nginx/sites-available/phanmemzalo.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo ufw allow 'Nginx Full'
+# Cấp SSL + tự bật HTTPS:
+sudo certbot --nginx -d phanmemzalo.com -d www.phanmemzalo.com -d api.phanmemzalo.com
+```
+
+Sau bước này: web chạy ở **https://phanmemzalo.com**, API ở **https://api.phanmemzalo.com**.
+
+### Bước 5 — Việc cần làm sau khi lên
+1. Đổi mật khẩu admin (`root@vsoftware.vn` / `admin@example.com`)
+2. Bật Telegram trong `/admin/telegram` (Bot Token + Chat ID)
+3. Kiểm tra form `/lien-he` + popup "Dùng thử" gửi được mail/Telegram
 
 ## Các lệnh thường dùng
 
@@ -120,20 +155,19 @@ docker compose exec -T postgres psql -U postgres news_db < backup-20260603.sql
 ## Cấu trúc files
 
 ```
-.
-├── docker-compose.yml          # Orchestrator chính
-├── .env.example                # Template config (copy → .env)
-├── .env                        # Config thật (KHÔNG commit)
-├── be-phanmemzalo/
-│   ├── Dockerfile              # Multi-stage build BE
-│   ├── docker-entrypoint.sh    # Tự run migration + seed lần đầu
-│   ├── .dockerignore
-│   └── uploads/                # Volume mount, ảnh sống ngoài container
-├── fe-phanmemzalo/
-│   ├── Dockerfile              # Multi-stage build FE
-│   ├── .dockerignore
-│   └── next.config.mjs         # output: 'standalone' cho Docker
-└── DEPLOY.md                   # File này
+/srv/phanmemzalo/                  # thư mục cha (2 repo ngang cấp)
+├── be-phanmemzalo/                # ← chạy `docker compose` Ở ĐÂY
+│   ├── docker-compose.yml         # Orchestrator (build FE từ ../fe-phanmemzalo)
+│   ├── .env.production.example    # Template config (copy → .env)
+│   ├── .env                       # Config thật (KHÔNG commit)
+│   ├── Dockerfile                 # Multi-stage build BE
+│   ├── docker-entrypoint.sh       # Tự run migration + seed lần đầu
+│   ├── nginx/phanmemzalo.conf     # Cấu hình Nginx reverse proxy + SSL
+│   ├── uploads/                   # Bind mount, ảnh sống ngoài container
+│   └── DEPLOY.md                  # File này
+└── fe-phanmemzalo/                # repo FE (sibling — build context của frontend)
+    ├── Dockerfile                 # Multi-stage build FE
+    └── next.config.mjs            # output: 'standalone' cho Docker
 ```
 
 ## Volumes
