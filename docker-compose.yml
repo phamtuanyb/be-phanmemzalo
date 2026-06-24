@@ -1,0 +1,108 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker Compose — orchestrate toàn bộ stack Vsoftware: Postgres + BE + FE.
+#
+# Cấu trúc thư mục mong đợi trên máy chạy:
+#   /srv/vsoftware/
+#   ├── be-vsoftware/      (repo BE — file này nằm ở đây)
+#   └── fe-vsoftware/      (repo FE — build context được tham chiếu ../fe-vsoftware)
+#
+# Usage (từ thư mục be-vsoftware/):
+#   docker compose up -d --build       # build và start tất cả
+#   docker compose down                # stop (giữ volume)
+#   docker compose down -v             # stop + xoá volume (CẨN THẬN: mất DB)
+#   docker compose logs -f backend     # xem log BE realtime
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vsoftware-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-news_db}
+    ports:
+      # SECURITY: bind ONLY to 127.0.0.1 — Docker bypass UFW filter, nếu để 0.0.0.0
+      # thì hacker từ internet vẫn vào được DB. Sửa từ "5433:5432" → "127.0.0.1:5433:5432".
+      - "127.0.0.1:${DB_PORT_HOST:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vsoftware-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-news_db}
+      JWT_SECRET: ${JWT_SECRET:-change_this_to_a_long_random_secret}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_this_refresh_secret_too}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
+      UPLOAD_DIR: /app/uploads
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-5242880}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3001}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # FORCE_RESEED=1 → entrypoint sẽ chạy seed:all --reset (ghi đè data từ snapshot.json)
+      # deploy.sh tự set biến này nếu phát hiện snapshot.json đã đổi.
+      FORCE_RESEED: ${FORCE_RESEED:-0}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-MKT Software}
+      CONTACT_RECEIVE_EMAIL: ${CONTACT_RECEIVE_EMAIL:-}
+    ports:
+      - "${BE_PORT:-3001}:3001"
+    volumes:
+      # Persist uploaded files outside container (giữ ảnh khi rebuild image)
+      - ./uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/categories > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    build:
+      # Build context trỏ sang repo FE — phải có thư mục fe-vsoftware ngang cấp be-vsoftware
+      context: ../fe-vsoftware
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* phải set ARG lúc build, không phải runtime
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+        NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-MKT Software}
+    container_name: vsoftware-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "${FE_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:
+    name: vsoftware_postgres_data

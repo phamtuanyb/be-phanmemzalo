@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+.git
+.vscode
+.idea
+# uploads — KHÔNG ignore: muốn ảnh đi cùng image để bake data vào build.
+# Nếu muốn loại bỏ uploads khỏi image (dùng volume riêng), uncomment dòng dưới:
+# uploads
