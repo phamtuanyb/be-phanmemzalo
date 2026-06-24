@@ -78,7 +78,7 @@ Compose tự động build lại image nào có thay đổi, restart container, 
 
 **FE phải rebuild khi đổi:**
 - Bất kỳ biến `NEXT_PUBLIC_*` nào trong `.env`
-- Code FE (`fe-vsoftware/`)
+- Code FE (`fe-phanmemzalo/`)
 - `package.json`
 
 ```bash
@@ -92,10 +92,10 @@ docker compose up -d frontend
 
 ```bash
 # Local
-cd be-vsoftware
+cd be-phanmemzalo
 npm run dump:all              # sinh snapshot.json mới
 cd ..
-git add be-vsoftware/src/database/seeds/snapshot.json
+git add be-phanmemzalo/src/database/seeds/snapshot.json
 git commit -m "data: update snapshot"
 git push
 
@@ -124,12 +124,12 @@ docker compose exec -T postgres psql -U postgres news_db < backup-20260603.sql
 ├── docker-compose.yml          # Orchestrator chính
 ├── .env.example                # Template config (copy → .env)
 ├── .env                        # Config thật (KHÔNG commit)
-├── be-vsoftware/
+├── be-phanmemzalo/
 │   ├── Dockerfile              # Multi-stage build BE
 │   ├── docker-entrypoint.sh    # Tự run migration + seed lần đầu
 │   ├── .dockerignore
 │   └── uploads/                # Volume mount, ảnh sống ngoài container
-├── fe-vsoftware/
+├── fe-phanmemzalo/
 │   ├── Dockerfile              # Multi-stage build FE
 │   ├── .dockerignore
 │   └── next.config.mjs         # output: 'standalone' cho Docker
@@ -140,8 +140,8 @@ docker compose exec -T postgres psql -U postgres news_db < backup-20260603.sql
 
 | Tên | Dùng cho | Có sống khi `down`? |
 |---|---|---|
-| `vsoftware_postgres_data` | DB Postgres | ✅ Có |
-| `./be-vsoftware/uploads` | Ảnh upload | ✅ Có (bind mount) |
+| `phanmemzalo_postgres_data` | DB Postgres | ✅ Có |
+| `./be-phanmemzalo/uploads` | Ảnh upload | ✅ Có (bind mount) |
 
 ⚠️ `docker compose down -v` sẽ xoá `postgres_data`. Ảnh upload an toàn vì là bind mount.
 
@@ -151,6 +151,6 @@ docker compose exec -T postgres psql -U postgres news_db < backup-20260603.sql
 
 **BE 500 khi save settings** → `docker compose logs backend` xem error. Có thể migration chưa chạy.
 
-**Mất ảnh** → Folder `be-vsoftware/uploads/` còn không. Nếu rỗng thì restore từ backup hoặc git.
+**Mất ảnh** → Folder `be-phanmemzalo/uploads/` còn không. Nếu rỗng thì restore từ backup hoặc git.
 
 **Container không khởi động** → `docker compose ps` xem trạng thái, `docker compose logs <service>` xem nguyên nhân.

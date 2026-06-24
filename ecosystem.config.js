@@ -14,14 +14,14 @@
 //
 // Lệnh hàng ngày:
 //   pm2 status                   # xem trạng thái
-//   pm2 logs vsoftware-api       # xem log realtime
-//   pm2 reload vsoftware-api     # restart không downtime
+//   pm2 logs phanmemzalo-api       # xem log realtime
+//   pm2 reload phanmemzalo-api     # restart không downtime
 // ─────────────────────────────────────────────────────────────────────────────
 
 module.exports = {
   apps: [
     {
-      name: 'vsoftware-api',
+      name: 'phanmemzalo-api',
       script: 'dist/main.js',         // file build ra của NestJS
       cwd: './',
       instances: 1,                   // NestJS với jobs/cron nên fork 1 instance

@@ -86,17 +86,17 @@ sudo chown -R $USER:$USER /srv/vsoftware
 cd /srv/vsoftware
 
 # Clone BE
-git clone https://github.com/VitechGroup/api-vsoftware.git be-vsoftware
+git clone https://github.com/VitechGroup/api-vsoftware.git be-phanmemzalo
 
 # Clone FE (đổi URL nếu khác)
-git clone <FE_REPO_URL> fe-vsoftware
+git clone <FE_REPO_URL> fe-phanmemzalo
 ```
 
 Sau bước này, cấu trúc sẽ là:
 ```
 /srv/vsoftware/
-├── be-vsoftware/
-└── fe-vsoftware/
+├── be-phanmemzalo/
+└── fe-phanmemzalo/
 ```
 
 ---
@@ -106,7 +106,7 @@ Sau bước này, cấu trúc sẽ là:
 ### 3.1 — BE `.env`
 
 ```bash
-cd /srv/vsoftware/be-vsoftware
+cd /srv/vsoftware/be-phanmemzalo
 cp .env.example .env
 nano .env
 ```
@@ -141,7 +141,7 @@ Lưu file: `Ctrl+O` → `Enter` → `Ctrl+X`.
 ### 3.2 — FE `.env.production`
 
 ```bash
-cd /srv/vsoftware/fe-vsoftware
+cd /srv/vsoftware/fe-phanmemzalo
 nano .env.production
 ```
 
@@ -162,7 +162,7 @@ Lưu file (Ctrl+O, Enter, Ctrl+X).
 ### 4.1 — BE
 
 ```bash
-cd /srv/vsoftware/be-vsoftware
+cd /srv/vsoftware/be-phanmemzalo
 chmod +x deploy-pm2.sh backup-db.sh setup-backup-cron.sh
 bash deploy-pm2.sh
 ```
@@ -177,21 +177,21 @@ Script sẽ tự động:
 
 Kiểm tra:
 ```bash
-pm2 status               # phải thấy vsoftware-api status: online
+pm2 status               # phải thấy phanmemzalo-api status: online
 curl http://localhost:3001/docs    # phải trả về HTML Swagger
 ```
 
 ### 4.2 — FE
 
 ```bash
-cd /srv/vsoftware/fe-vsoftware
+cd /srv/vsoftware/fe-phanmemzalo
 chmod +x deploy-pm2.sh
 bash deploy-pm2.sh
 ```
 
 Kiểm tra:
 ```bash
-pm2 status               # phải có cả vsoftware-fe và vsoftware-api status: online
+pm2 status               # phải có cả phanmemzalo-fe và phanmemzalo-api status: online
 curl http://localhost:3000   # phải trả về HTML
 ```
 
@@ -278,7 +278,7 @@ Certbot sẽ hỏi vài câu (email, agree terms, redirect HTTP→HTTPS — ch�
 ## Bước 6 — Cài backup DB tự động (mỗi 5h)
 
 ```bash
-cd /srv/vsoftware/be-vsoftware
+cd /srv/vsoftware/be-phanmemzalo
 bash setup-backup-cron.sh
 ```
 
@@ -297,13 +297,13 @@ Khi anh sửa code/data ở local rồi `.\sync.ps1` xong, lên server gõ:
 
 ### Update BE
 ```bash
-cd /srv/vsoftware/be-vsoftware
+cd /srv/vsoftware/be-phanmemzalo
 bash deploy-pm2.sh
 ```
 
 ### Update FE
 ```bash
-cd /srv/vsoftware/fe-vsoftware
+cd /srv/vsoftware/fe-phanmemzalo
 bash deploy-pm2.sh
 ```
 
@@ -321,11 +321,11 @@ bash deploy-pm2.sh --force-reset   # CẨN THẬN: mất data prod-only
 
 ```bash
 pm2 status                       # xem 2 process có online không
-pm2 logs vsoftware-api           # log BE realtime
-pm2 logs vsoftware-fe            # log FE realtime
+pm2 logs phanmemzalo-api           # log BE realtime
+pm2 logs phanmemzalo-fe            # log FE realtime
 pm2 monit                        # dashboard RAM/CPU
-pm2 restart vsoftware-api        # restart BE (có downtime nhẹ)
-pm2 reload vsoftware-api         # reload BE (không downtime)
+pm2 restart phanmemzalo-api        # restart BE (có downtime nhẹ)
+pm2 reload phanmemzalo-api         # reload BE (không downtime)
 ```
 
 ```bash
@@ -341,8 +341,8 @@ free -h                          # còn bao nhiêu RAM
 
 ### Website hiện 500 sau khi deploy
 ```bash
-pm2 logs vsoftware-api --lines 100      # xem error BE
-pm2 logs vsoftware-fe --lines 100       # xem error FE
+pm2 logs phanmemzalo-api --lines 100      # xem error BE
+pm2 logs phanmemzalo-fe --lines 100       # xem error FE
 ```
 
 Nếu thấy lỗi DB connection → check `.env` đúng password chưa.
@@ -351,10 +351,10 @@ Nếu thấy lỗi build → có thể code mới bị lỗi syntax, rollback b�
 ### Mất dữ liệu sau deploy
 Restore từ backup gần nhất:
 ```bash
-cd /srv/vsoftware/be-vsoftware/backups
+cd /srv/vsoftware/be-phanmemzalo/backups
 ls -lt | head     # tìm file gần nhất
 gunzip < dump-XXX.sql.gz | psql -h localhost -U vsoftware -d news_db
-pm2 restart vsoftware-api
+pm2 restart phanmemzalo-api
 ```
 
 ### Nginx báo 502 Bad Gateway

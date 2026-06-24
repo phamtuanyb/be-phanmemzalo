@@ -100,12 +100,12 @@ else
 fi
 
 # ── Bước 7: PM2 reload ──────────────────────────────────────────────────────
-log "[7/7] PM2 reload vsoftware-api"
-if pm2 describe vsoftware-api >/dev/null 2>&1; then
-  pm2 reload vsoftware-api --update-env
+log "[7/7] PM2 reload phanmemzalo-api"
+if pm2 describe phanmemzalo-api >/dev/null 2>&1; then
+  pm2 reload phanmemzalo-api --update-env
   ok "BE đã reload (không downtime)"
 else
-  warn "Process vsoftware-api chưa tồn tại — khởi động lần đầu:"
+  warn "Process phanmemzalo-api chưa tồn tại — khởi động lần đầu:"
   pm2 start ecosystem.config.js
   pm2 save
   ok "BE đã khởi động lần đầu"
@@ -116,6 +116,6 @@ ok "DEPLOY BE hoàn tất!"
 echo ""
 log "Kiểm tra:"
 echo "    pm2 status                    # trạng thái process"
-echo "    pm2 logs vsoftware-api        # log realtime"
+echo "    pm2 logs phanmemzalo-api        # log realtime"
 echo "    curl http://localhost:3001/docs  # health check Swagger"
 echo ""

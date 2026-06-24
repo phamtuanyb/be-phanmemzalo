@@ -2,11 +2,11 @@
 # Docker Compose — orchestrate toàn bộ stack Vsoftware: Postgres + BE + FE.
 #
 # Cấu trúc thư mục mong đợi trên máy chạy:
-#   /srv/vsoftware/
-#   ├── be-vsoftware/      (repo BE — file này nằm ở đây)
-#   └── fe-vsoftware/      (repo FE — build context được tham chiếu ../fe-vsoftware)
+#   /srv/phanmemzalo/
+#   ├── be-phanmemzalo/      (repo BE — file này nằm ở đây)
+#   └── fe-phanmemzalo/      (repo FE — build context được tham chiếu ../fe-phanmemzalo)
 #
-# Usage (từ thư mục be-vsoftware/):
+# Usage (từ thư mục be-phanmemzalo/):
 #   docker compose up -d --build       # build và start tất cả
 #   docker compose down                # stop (giữ volume)
 #   docker compose down -v             # stop + xoá volume (CẨN THẬN: mất DB)
@@ -16,7 +16,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: vsoftware-db
+    container_name: phanmemzalo-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USERNAME:-postgres}
@@ -38,7 +38,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: vsoftware-api
+    container_name: phanmemzalo-api
     restart: unless-stopped
     depends_on:
       postgres:
@@ -85,15 +85,15 @@ services:
 
   frontend:
     build:
-      # Build context trỏ sang repo FE — phải có thư mục fe-vsoftware ngang cấp be-vsoftware
-      context: ../fe-vsoftware
+      # Build context trỏ sang repo FE — phải có thư mục fe-phanmemzalo ngang cấp be-phanmemzalo
+      context: ../fe-phanmemzalo
       dockerfile: Dockerfile
       args:
         # NEXT_PUBLIC_* phải set ARG lúc build, không phải runtime
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
         NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-MKT Software}
-    container_name: vsoftware-web
+    container_name: phanmemzalo-web
     restart: unless-stopped
     depends_on:
       - backend
@@ -105,4 +105,4 @@ services:
 
 volumes:
   postgres_data:
-    name: vsoftware_postgres_data
+    name: phanmemzalo_postgres_data
