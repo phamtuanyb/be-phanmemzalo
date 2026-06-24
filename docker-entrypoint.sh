@@ -20,8 +20,10 @@ echo "==> [entrypoint] Postgres OK"
 echo "==> [entrypoint] Running migrations..."
 npm run migration:run
 
-# Đếm số category — nếu < 5 nghĩa là DB rỗng (cần seed lần đầu)
-CATEGORY_COUNT=$(node -e "
+# Đếm số POSTS — migration chỉ seed categories (6) + menu tối giản, KHÔNG seed posts.
+# Nên posts=0 nghĩa là chưa restore snapshot lần nào → cần seed lần đầu.
+# (Dùng posts thay vì categories vì migration luôn tạo 6 categories → check categories sẽ sai.)
+POST_COUNT=$(node -e "
 const { Client } = require('pg');
 const c = new Client({
   host: process.env.DB_HOST,
@@ -31,7 +33,7 @@ const c = new Client({
   database: process.env.DB_DATABASE,
 });
 c.connect()
-  .then(() => c.query('SELECT COUNT(*) FROM categories'))
+  .then(() => c.query('SELECT COUNT(*) FROM posts'))
   .then(r => { console.log(r.rows[0].count); c.end(); })
   .catch(() => { console.log('0'); c.end(); });
 " 2>/dev/null || echo "0")
@@ -39,11 +41,12 @@ c.connect()
 if [ "$FORCE_RESEED" = "1" ]; then
   echo "==> [entrypoint] FORCE_RESEED=1 → TRUNCATE + restore từ snapshot.json"
   npm run seed:all -- --reset || echo "WARN seed --reset failed, tiếp tục start"
-elif [ "$CATEGORY_COUNT" -lt "5" ]; then
-  echo "==> [entrypoint] DB rỗng (categories=$CATEGORY_COUNT) → seed lần đầu từ snapshot.json"
-  npm run seed:all || echo "WARN seed failed, tiếp tục start"
+elif [ "$POST_COUNT" -lt "1" ]; then
+  # --reset để xoá data tối giản migration vừa seed (categories/menu/footer cũ) → restore SẠCH từ snapshot.
+  echo "==> [entrypoint] Chưa có snapshot (posts=$POST_COUNT) → restore lần đầu từ snapshot.json (--reset)"
+  npm run seed:all -- --reset || echo "WARN seed failed, tiếp tục start"
 else
-  echo "==> [entrypoint] DB đã có data (categories=$CATEGORY_COUNT, FORCE_RESEED=$FORCE_RESEED) → giữ nguyên"
+  echo "==> [entrypoint] DB đã có data (posts=$POST_COUNT, FORCE_RESEED=$FORCE_RESEED) → giữ nguyên"
 fi
 
 echo "==> [entrypoint] Starting NestJS..."
