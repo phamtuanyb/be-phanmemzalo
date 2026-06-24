@@ -6,7 +6,7 @@ import { Post, PostStatus } from '../../entities/post.entity';
 const UNSPLASH = (id: string, w = 1280, h = 720) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&h=${h}&q=80`;
 
-const MKT SOFTWARE_COMMITMENTS = {
+const MKT_SOFTWARE_COMMITMENTS = {
   heading: 'MKT Software cam kết',
   items: [
     { iconName: 'Zap', title: 'Triển khai 4-8 tuần', description: 'Methodology chia nhỏ module, bàn giao cuốn chiếu. Có demo từng sprint.' },
