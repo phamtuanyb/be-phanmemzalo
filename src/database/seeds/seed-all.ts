@@ -29,14 +29,33 @@ const SNAPSHOT = path.resolve(__dirname, 'snapshot.json');
 // Bật bằng `npm run seed:all -- --reset` để TRUNCATE sạch trước khi restore (cẩn thận: mất hết data hiện có).
 const RESET = process.argv.includes('--reset');
 
+// Sắp xếp cha-trước-con cho bảng có self-FK (parentId) như menu_items, categories.
+// Tránh lỗi FK khi snapshot không đảm bảo thứ tự (con đứng trước cha). Topological sort,
+// xử lý mọi độ sâu; ổn định và KHÔNG phụ thuộc session_replication_role (vốn không an
+// toàn với connection pool của TypeORM).
+function sortParentFirst(rows: any[]): any[] {
+  if (!rows.length || !('parentId' in rows[0]) || !('id' in rows[0])) return rows;
+  const byId = new Map<unknown, any>(rows.map((r) => [r.id, r]));
+  const out: any[] = [];
+  const seen = new Set<unknown>();
+  const visit = (r: any) => {
+    if (seen.has(r.id)) return;
+    seen.add(r.id);
+    if (r.parentId != null && byId.has(r.parentId)) visit(byId.get(r.parentId));
+    out.push(r);
+  };
+  rows.forEach(visit);
+  return out;
+}
+
 async function bulkInsert(table: string, rows: any[]) {
   if (!rows.length) return;
   const sample = rows[0];
   const columns = Object.keys(sample).filter((k) => sample[k] !== undefined);
   const colSql = columns.map((c) => `"${c}"`).join(', ');
 
-  // Insert từng dòng để dễ ON CONFLICT theo PK.
-  for (const row of rows) {
+  // Insert từng dòng để dễ ON CONFLICT theo PK. Cha trước con để không vỡ FK.
+  for (const row of sortParentFirst(rows)) {
     const values = columns.map((c) => row[c]);
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
     await dataSource.query(
