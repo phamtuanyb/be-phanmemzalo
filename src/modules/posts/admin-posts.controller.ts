@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,11 +9,15 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../../entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -57,6 +62,34 @@ export class AdminPostsController {
   @ApiOperation({ summary: 'Tạo bài viết mới' })
   create(@Body() dto: CreatePostDto, @CurrentUser() user: User) {
     return this.postsService.create(dto, user);
+  }
+
+  @Post('import-docx')
+  @ApiOperation({ summary: 'Import hàng loạt bài viết từ file Word (.docx)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FilesInterceptor('files', 100, {
+      storage: memoryStorage(),
+      limits: { fileSize: 25 * 1024 * 1024 }, // 25MB / file
+      fileFilter: (req, file, cb) => {
+        const isDocx =
+          file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+          /\.docx$/i.test(file.originalname);
+        if (!isDocx) {
+          return cb(new BadRequestException('Chỉ chấp nhận file Word .docx (không hỗ trợ .doc cũ)'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  importDocx(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body() body: { categoryId?: string },
+    @CurrentUser() user: User,
+  ) {
+    if (!files?.length) throw new BadRequestException('Chưa chọn file .docx nào');
+    const categoryId = body.categoryId ? Number(body.categoryId) : undefined;
+    return this.postsService.importDocx(files, { categoryId }, user);
   }
 
   @Patch(':id')

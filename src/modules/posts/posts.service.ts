@@ -6,10 +6,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as mammoth from 'mammoth';
 import { generateSlug } from '../../common/utils/slug.util';
 import { Category } from '../../entities/category.entity';
 import { Post, PostStatus } from '../../entities/post.entity';
 import { User } from '../../entities/user.entity';
+import { MediaService } from '../media/media.service';
 import { SeoService } from '../seo/seo.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { QueryPostDto, SortBy, SortOrder } from './dto/query-post.dto';
@@ -23,6 +25,7 @@ export class PostsService {
     @InjectRepository(Post) private postRepo: Repository<Post>,
     @InjectRepository(Category) private categoryRepo: Repository<Category>,
     private seoService: SeoService,
+    private mediaService: MediaService,
   ) {}
 
   // ─── PUBLIC ───────────────────────────────────────────────────────────────
@@ -200,6 +203,90 @@ export class PostsService {
     return this.computeAndSaveSeoScore(saved);
   }
 
+  /**
+   * Import hàng loạt bài viết từ file Word (.docx).
+   * - Tiêu đề = tên file (đã dọn). Nội dung = HTML từ mammoth (giữ link/backlink, heading, list, bảng).
+   * - Ảnh nhúng trong Word → trích ra → WebP qua MediaService → src tương đối /uploads/...
+   * - Ảnh đầu tiên → thumbnail. Mặc định trạng thái Nháp. Slug trùng → thêm -2, -3...
+   */
+  async importDocx(
+    files: Express.Multer.File[],
+    opts: { categoryId?: number },
+    author: User,
+  ) {
+    const categoryId = opts.categoryId ?? (await this.getDefaultCategoryId());
+
+    // Word Heading 1 → <h2> (vì <h1> dành cho tiêu đề trang). Mammoth tự xử lý link/list/bảng/đậm-nghiêng.
+    const styleMap = [
+      "p[style-name='Title'] => h2:fresh",
+      "p[style-name='Heading 1'] => h2:fresh",
+      "p[style-name='Heading 2'] => h3:fresh",
+      "p[style-name='Heading 3'] => h4:fresh",
+      "p[style-name='Heading 4'] => h5:fresh",
+    ];
+
+    const usedSlugs = new Set<string>(); // tránh trùng slug giữa các file trong cùng 1 lần import
+    const items: Array<{
+      file: string;
+      ok: boolean;
+      postId?: number;
+      slug?: string;
+      error?: string;
+    }> = [];
+    let success = 0;
+
+    for (const file of files) {
+      try {
+        const title = this.docxFilenameToTitle(file.originalname);
+        const images: string[] = [];
+
+        const result = await mammoth.convertToHtml(
+          { buffer: file.buffer },
+          {
+            styleMap,
+            convertImage: mammoth.images.imgElement(async (image) => {
+              const buffer = await image.read();
+              const media = await this.mediaService.saveBuffer(buffer, { altText: title });
+              const relUrl = `/uploads/${media.fileName}`; // tương đối → chạy đúng mọi domain
+              images.push(relUrl);
+              return { src: relUrl };
+            }),
+          },
+        );
+
+        const content = result.value;
+        const excerpt = this.htmlToExcerpt(content);
+        const slug = await this.resolveUniqueSlugBatch(title, usedSlugs);
+        usedSlugs.add(slug);
+
+        const post = this.postRepo.create({
+          title: title.slice(0, 255),
+          slug,
+          content,
+          excerpt,
+          thumbnail: images[0] ?? null,
+          categoryId,
+          authorId: author.id,
+          status: PostStatus.DRAFT,
+          seoTitle: title.slice(0, 255),
+          seoDescription: excerpt.slice(0, 300),
+        });
+        const saved = await this.postRepo.save(post);
+
+        items.push({ file: file.originalname, ok: true, postId: saved.id, slug });
+        success++;
+      } catch (err) {
+        items.push({
+          file: file.originalname,
+          ok: false,
+          error: err instanceof Error ? err.message : 'Lỗi không xác định',
+        });
+      }
+    }
+
+    return { total: files.length, success, failed: files.length - success, items };
+  }
+
   async update(id: number, dto: UpdatePostDto) {
     const post = await this.findOneAdmin(id);
 
@@ -278,6 +365,38 @@ export class PostsService {
     const base = generateSlug(slug || title);
     await this.checkSlugUnique(base);
     return base;
+  }
+
+  // Tên file .docx → tiêu đề: bỏ đuôi, đổi _ và - thành khoảng trắng, gộp khoảng trắng thừa.
+  private docxFilenameToTitle(filename: string): string {
+    // Multer/busboy decode tên file theo latin1 → tiếng Việt bị lỗi font. Decode lại về UTF-8.
+    const utf8 = Buffer.from(filename, 'latin1').toString('utf8');
+    const safe = utf8.includes('�') ? filename : utf8; // nếu hỏng thì giữ nguyên gốc
+    const noExt = safe.replace(/\.docx$/i, '');
+    const cleaned = noExt.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return cleaned || 'Bài viết';
+  }
+
+  // HTML → đoạn mô tả ngắn (~160 ký tự) để làm excerpt/seoDescription.
+  private htmlToExcerpt(html: string): string {
+    const text = html
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text.length <= 160) return text;
+    return text.slice(0, 160).replace(/\s+\S*$/, '') + '…';
+  }
+
+  // Sinh slug duy nhất: kiểm tra cả DB lẫn các slug đã dùng trong batch hiện tại.
+  private async resolveUniqueSlugBatch(title: string, used: Set<string>): Promise<string> {
+    const base = generateSlug(title) || 'bai-viet';
+    let candidate = base;
+    let i = 2;
+    while (used.has(candidate) || (await this.postRepo.findOne({ where: { slug: candidate } }))) {
+      candidate = `${base}-${i++}`;
+    }
+    return candidate;
   }
 
   private async checkSlugUnique(slug: string, excludeId?: number) {

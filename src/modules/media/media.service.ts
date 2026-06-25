@@ -15,9 +15,13 @@ export class MediaService {
     private configService: ConfigService,
   ) {}
 
-  async saveUpload(
-    file: Express.Multer.File,
-    metadata?: { altText?: string; caption?: string },
+  /**
+   * Convert 1 buffer ảnh bất kỳ → WebP, lưu file + tạo record Media.
+   * Dùng chung cho upload form, import URL, và import ảnh nhúng từ file Word.
+   */
+  async saveBuffer(
+    buffer: Buffer,
+    opts?: { animated?: boolean; altText?: string; caption?: string },
   ): Promise<Media> {
     const uploadDir = this.configService.get<string>('UPLOAD_DIR', './uploads');
     const absUploadDir = path.resolve(uploadDir);
@@ -27,9 +31,8 @@ export class MediaService {
 
     const filename = `${uuid()}.webp`;
     const filePath = path.join(absUploadDir, filename);
-    const isAnimated = file.mimetype === 'image/gif';
 
-    await sharp(file.buffer, { animated: isAnimated })
+    await sharp(buffer, { animated: opts?.animated ?? false })
       .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 85 })
       .toFile(filePath);
@@ -42,11 +45,22 @@ export class MediaService {
       fileName: filename,
       mimeType: 'image/webp',
       size: stat.size,
-      altText: metadata?.altText ?? null,
-      caption: metadata?.caption ?? null,
+      altText: opts?.altText ?? null,
+      caption: opts?.caption ?? null,
     });
 
     return this.mediaRepo.save(media);
+  }
+
+  async saveUpload(
+    file: Express.Multer.File,
+    metadata?: { altText?: string; caption?: string },
+  ): Promise<Media> {
+    return this.saveBuffer(file.buffer, {
+      animated: file.mimetype === 'image/gif',
+      altText: metadata?.altText,
+      caption: metadata?.caption,
+    });
   }
 
   async importFromUrl(
@@ -62,32 +76,7 @@ export class MediaService {
     }
 
     const buffer = Buffer.from(await res.arrayBuffer());
-
-    const uploadDir = this.configService.get<string>('UPLOAD_DIR', './uploads');
-    const absUploadDir = path.resolve(uploadDir);
-    if (!fs.existsSync(absUploadDir)) fs.mkdirSync(absUploadDir, { recursive: true });
-
-    const filename = `${uuid()}.webp`;
-    const filePath = path.join(absUploadDir, filename);
-
-    await sharp(buffer)
-      .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 85 })
-      .toFile(filePath);
-
-    const stat = fs.statSync(filePath);
-    const publicUrl = this.configService.get<string>('PUBLIC_URL', 'http://localhost:3001');
-
-    const media = this.mediaRepo.create({
-      url: `${publicUrl}/uploads/${filename}`,
-      fileName: filename,
-      mimeType: 'image/webp',
-      size: stat.size,
-      altText: metadata?.altText ?? null,
-      caption: metadata?.caption ?? null,
-    });
-
-    return this.mediaRepo.save(media);
+    return this.saveBuffer(buffer, { altText: metadata?.altText, caption: metadata?.caption });
   }
 
   findAll() {

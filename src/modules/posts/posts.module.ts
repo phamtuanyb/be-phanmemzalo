@@ -2,13 +2,14 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Category } from '../../entities/category.entity';
 import { Post } from '../../entities/post.entity';
+import { MediaModule } from '../media/media.module';
 import { SeoModule } from '../seo/seo.module';
 import { AdminPostsController } from './admin-posts.controller';
 import { PublicPostsController } from './public-posts.controller';
 import { PostsService } from './posts.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Post, Category]), SeoModule],
+  imports: [TypeOrmModule.forFeature([Post, Category]), SeoModule, MediaModule],
   controllers: [AdminPostsController, PublicPostsController],
   providers: [PostsService],
   exports: [PostsService],
