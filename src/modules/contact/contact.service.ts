@@ -106,6 +106,8 @@ export class ContactService {
       const text = await res.text().catch(() => '');
       throw new Error(`HTTP ${res.status}: ${text}`);
     }
+
+    this.logger.log(`CRM webhook OK — lead ${dto.phone} đã đẩy sang CRM`);
   }
 
   async findAll(params: { page?: number; limit?: number } = {}): Promise<{ data: ContactSubmission[]; meta: { page: number; limit: number; total: number; totalPages: number } }> {
