@@ -40,6 +40,11 @@ export class ContactService {
       source: dto.source,
     });
 
+    // Đẩy lead sang CRM — non-blocking.
+    this.notifyCrm(dto).catch((err) =>
+      this.logger.error(`CRM webhook thất bại: ${err instanceof Error ? err.message : err}`),
+    );
+
     // Gửi email thông báo là PHỤ — lead đã lưu ở trên rồi. Lỗi mail (vd SMTP sai)
     // KHÔNG được làm hỏng request, nếu không khách sẽ thấy lỗi dù đã gửi thành công.
     try {
@@ -61,6 +66,45 @@ export class ContactService {
       }
     } catch (err) {
       this.logger.error(`Lưu lead OK nhưng gửi email thất bại: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  private async notifyCrm(dto: CreateContactDto): Promise<void> {
+    const url = this.config.get<string>('CRM_WEBHOOK_URL');
+    const secret = this.config.get<string>('CRM_WEBHOOK_SECRET');
+    const websiteKey = this.config.get<string>('CRM_WEBSITE_KEY');
+    const assignToEmail = this.config.get<string>('CRM_ASSIGN_TO_EMAIL');
+
+    if (!url || !secret) return;
+
+    const notesParts = [`Nhu cầu: ${dto.need}`];
+    if (dto.company) notesParts.push(`Doanh nghiệp: ${dto.company}`);
+    if (dto.description) notesParts.push(dto.description);
+    if (dto.source) notesParts.push(`Nguồn: ${dto.source}`);
+
+    const body: Record<string, string | undefined> = {
+      name: dto.name,
+      phone: dto.phone,
+      email: dto.email,
+      notes: notesParts.join('\n'),
+      websiteKey: websiteKey || undefined,
+      assignToEmail: assignToEmail || undefined,
+    };
+
+    Object.keys(body).forEach((k) => body[k] === undefined && delete body[k]);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Mkt-Webhook-Secret': secret,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}: ${text}`);
     }
   }
 
